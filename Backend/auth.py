@@ -19,7 +19,12 @@ ROLE_HR = "HR"
 ROLE_DEVELOPER = "Developer"
 VALID_ROLES = {ROLE_ADMIN, ROLE_HR, ROLE_DEVELOPER}
 
-JWT_SECRET = os.getenv("JWT_SECRET", "change-this-in-backend-env")
+_jwt_secret_raw = os.getenv("JWT_SECRET", "change-this-in-backend-env")
+if len(_jwt_secret_raw.encode("utf-8")) < 32:
+    # Keep app running in dev even with short secrets while meeting HS256 key length guidance.
+    JWT_SECRET = hashlib.sha256(_jwt_secret_raw.encode("utf-8")).hexdigest()
+else:
+    JWT_SECRET = _jwt_secret_raw
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "60"))
 

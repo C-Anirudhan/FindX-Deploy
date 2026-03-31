@@ -1,8 +1,11 @@
 import json
+import os
+import socket
 import time
 import threading
 from typing import Any
 
+import uvicorn
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -486,3 +489,41 @@ async def stream_query_documents(
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "message": "Backend is running"}
+
+
+def _is_port_available(host: str, port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind((host, port))
+        except OSError:
+            return False
+    return True
+
+
+def _resolve_runtime_port(host: str, preferred_port: int, max_attempts: int = 20) -> int:
+    if _is_port_available(host, preferred_port):
+        return preferred_port
+
+    for offset in range(1, max_attempts + 1):
+        candidate = preferred_port + offset
+        if _is_port_available(host, candidate):
+            print(
+                f"[Startup] Port {preferred_port} is busy. Switching to available port {candidate}.",
+                flush=True,
+            )
+            return candidate
+
+    raise RuntimeError(
+        f"No available port found in range {preferred_port}-{preferred_port + max_attempts} for host {host}"
+    )
+
+
+if __name__ == "__main__":
+    host = os.getenv("BACKEND_HOST", "0.0.0.0")
+    preferred_port = int(os.getenv("BACKEND_PORT", "8000"))
+    max_port_scan = int(os.getenv("BACKEND_PORT_SCAN_MAX", "50"))
+    reload_enabled = os.getenv("BACKEND_RELOAD", "false").strip().lower() in {"1", "true", "yes"}
+
+    runtime_port = _resolve_runtime_port(host, preferred_port, max_attempts=max_port_scan)
+    uvicorn.run("main:app", host=host, port=runtime_port, reload=reload_enabled)

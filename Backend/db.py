@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from pymongo import ASCENDING, DESCENDING, MongoClient
 from pymongo.collection import Collection
 from pymongo.database import Database
+from pymongo.errors import DuplicateKeyError
 
 try:
     from .auth import ROLE_ADMIN, ROLE_DEVELOPER, ROLE_HR, hash_password
@@ -31,7 +32,6 @@ LEGACY_USER_MAPPING = {
     "employee@findx.ai": {
         "username": "developer",
         "role": ROLE_DEVELOPER,
-        "email": "developer@findx.ai",
         "id": "developer-user",
     },
     "developer@findx.ai": {"username": "developer", "role": ROLE_DEVELOPER},
@@ -39,6 +39,11 @@ LEGACY_USER_MAPPING = {
 
 
 def ensure_indexes() -> None:
+    doc_indexes = documents_col.index_information()
+    legacy_doc_uuid_index = doc_indexes.get("doc_uuid_1")
+    if legacy_doc_uuid_index and legacy_doc_uuid_index.get("unique"):
+        documents_col.drop_index("doc_uuid_1")
+
     users_col.create_index([("username", ASCENDING)], unique=True)
     users_col.create_index([("email", ASCENDING)], unique=True)
     documents_col.create_index([("document_id", ASCENDING)], unique=True)
@@ -52,20 +57,63 @@ def ensure_indexes() -> None:
 
 def migrate_legacy_users() -> None:
     for email, updates in LEGACY_USER_MAPPING.items():
+        if email in {"employee@findx.ai", "developer@findx.ai"}:
+            continue
         users_col.update_many(
             {"email": email},
             {"$set": updates},
         )
 
+    canonical_developer = (
+        users_col.find_one({"email": "developer@findx.ai"})
+        or users_col.find_one({"email": "employee@findx.ai"})
+        or users_col.find_one({"username": "developer"})
+    )
+
+    if canonical_developer:
+        duplicate_developers = list(
+            users_col.find(
+                {
+                    "username": "developer",
+                    "_id": {"$ne": canonical_developer["_id"]},
+                }
+            )
+        )
+        for duplicate in duplicate_developers:
+            users_col.update_one(
+                {"_id": duplicate["_id"]},
+                {"$set": {"username": f"developer_legacy_{duplicate['_id']}"}},
+            )
+
+        try:
+            users_col.update_one(
+                {"_id": canonical_developer["_id"]},
+                {
+                    "$set": {
+                        "username": "developer",
+                        "email": "developer@findx.ai",
+                        "id": "developer-user",
+                        "role": ROLE_DEVELOPER,
+                    }
+                },
+            )
+        except DuplicateKeyError:
+            # If another record still owns this email, keep canonical role/id normalized
+            # and leave email untouched to avoid crashing startup.
+            users_col.update_one(
+                {"_id": canonical_developer["_id"]},
+                {
+                    "$set": {
+                        "username": "developer",
+                        "id": "developer-user",
+                        "role": ROLE_DEVELOPER,
+                    }
+                },
+            )
+
     users_col.update_many(
-        {"username": "developer"},
-        {
-            "$set": {
-                "email": "developer@findx.ai",
-                "id": "developer-user",
-                "role": ROLE_DEVELOPER,
-            }
-        },
+        {"email": "employee@findx.ai"},
+        {"$set": {"role": ROLE_DEVELOPER}},
     )
 
     users_without_username = list(users_col.find({"username": {"$exists": False}}))
@@ -103,7 +151,7 @@ def _demo_users() -> list[dict[str, Any]]:
             "id": "developer-user",
             "username": "developer",
             "email": "developer@findx.ai",
-            "password": hash_password("developer123"),
+            "password": hash_password("dev123"),
             "role": ROLE_DEVELOPER,
         },
     ]
@@ -116,6 +164,20 @@ def seed_demo_users() -> None:
             {"$setOnInsert": user},
             upsert=True,
         )
+
+    # Keep the seeded developer credential consistent for existing databases.
+    users_col.update_one(
+        {"username": "developer"},
+        {
+            "$set": {
+                "id": "developer-user",
+                "email": "developer@findx.ai",
+                "role": ROLE_DEVELOPER,
+                "password": hash_password("dev123"),
+            }
+        },
+        upsert=True,
+    )
 
 
 def store_document_record(

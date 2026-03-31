@@ -21,7 +21,7 @@ export const DEMO_USERS = [
     id: 'developer-user',
     name: 'Rohan Singh',
     email: 'developer@findx.ai',
-    password: 'developer123',
+    password: 'dev123',
     role: 'Developer',
     department: 'Engineering',
   },
