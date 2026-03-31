@@ -49,6 +49,7 @@ export function loginUser(email, password) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'ngrok-skip-browser-warning': '69420',
     },
     body: JSON.stringify({ email, password }),
   })
@@ -58,6 +59,7 @@ export function fetchCurrentUser(token) {
   return apiRequest('/api/auth/me', {
     headers: {
       Authorization: `Bearer ${token}`,
+      'ngrok-skip-browser-warning': '69420',
     },
   })
 }
@@ -68,6 +70,7 @@ export function sendChatMessage({ token, query, chatId, chatHistory }) {
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
+      'ngrok-skip-browser-warning': '69420',
     },
     body: JSON.stringify({
       query,
@@ -90,6 +93,7 @@ export async function sendChatMessageStream({
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
+      'ngrok-skip-browser-warning': '69420',
     },
     signal,
     body: JSON.stringify({
@@ -182,6 +186,7 @@ export function uploadFileToSession({
     request.open('POST', buildUrl('/api/upload/file'))
     request.responseType = 'json'
     request.setRequestHeader('Authorization', `Bearer ${token}`)
+    request.setRequestHeader('ngrok-skip-browser-warning', '69420') // Bypass for uploads
 
     request.upload.onprogress = (event) => {
       if (!event.lengthComputable) {
@@ -230,6 +235,7 @@ export function fetchUploadProgress({ token, uploadId }) {
   return apiRequest(`/api/upload/progress/${uploadId}`, {
     headers: {
       Authorization: `Bearer ${token}`,
+      'ngrok-skip-browser-warning': '69420',
     },
   })
 }
@@ -240,6 +246,7 @@ export function updateDocumentVisibility({ token, documentId, visibilityScope })
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
+      'ngrok-skip-browser-warning': '69420',
     },
     body: JSON.stringify({
       visibility_scope: visibilityScope,
@@ -252,6 +259,7 @@ export function deleteDocument({ token, documentId }) {
     method: 'DELETE',
     headers: {
       Authorization: `Bearer ${token}`,
+      'ngrok-skip-browser-warning': '69420',
     },
   })
 }
